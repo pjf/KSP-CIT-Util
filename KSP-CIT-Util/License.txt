@@ -120,12 +120,4 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 *************************
 
-Detach sound from http://www.freesound.org/people/kemitix/sounds/41867/
-(C) kemitix 2007 (CC BY-NC 3.0)
-
-Break sound from http://www.freesound.org/people/Benboncan/sounds/103628/
-(C) Benboncan 2010 (CC BY 3.0)
-
-*************************
-
 Contains modified code from KAS by KospY (used with permission) to which this license applies: http://kerbal.curseforge.com/ksp-mods/223900-kerbal-attachment-system-kas/license (link valid 03.09.2014)
