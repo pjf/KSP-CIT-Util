@@ -24,6 +24,12 @@ namespace CIT_Util
             return windowRect.Contains(mousePosFromEvent);
         }
 
+        public static bool TryGetModule<T>(this Part part, out T outModule) where T : PartModule
+        {
+            outModule = part.FindModuleImplementing<T>();
+            return outModule != null;
+        }
+
         public static Color MakeColorTransparent(this Color color, float transparency)
         {
             var rgba = color.GetRgba();
