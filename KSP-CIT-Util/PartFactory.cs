@@ -1,5 +1,6 @@
 ﻿using System;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace CIT_Util
 {
@@ -33,7 +34,7 @@ namespace CIT_Util
             }
             var currentVessel = FlightGlobals.ActiveVessel;
             var avPart = PartLoader.getPartInfoByName(partName);
-            var obj = UnityEngine.Object.Instantiate(avPart.partPrefab);
+            var obj = Object.Instantiate(avPart.partPrefab);
             if (obj == null)
             {
                 Debug.Log(LogPrefix + " failed to instantiate part " + partName);

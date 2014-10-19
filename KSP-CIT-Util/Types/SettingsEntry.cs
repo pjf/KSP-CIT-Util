@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
-namespace CIT_Util.Types
+﻿namespace CIT_Util.Types
 {
     public class SettingsEntry
     {

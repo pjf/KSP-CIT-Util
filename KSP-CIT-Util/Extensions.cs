@@ -1,13 +1,22 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 
 namespace CIT_Util
 {
     public static class Extensions
     {
+        public static double GetMassOfPartAndChildren(this Part part)
+        {
+            if (part == null)
+            {
+                return 0d;
+            }
+            double sum = part.mass;
+            sum += part.children.Sum(pc => pc.GetMassOfPartAndChildren());
+            return sum;
+        }
+
         public static float[] GetRgba(this Color color)
         {
             var ret = new float[4];
@@ -22,12 +31,6 @@ namespace CIT_Util
         {
             var mousePosFromEvent = Event.current.mousePosition;
             return windowRect.Contains(mousePosFromEvent);
-        }
-
-        public static bool TryGetModule<T>(this Part part, out T outModule) where T : PartModule
-        {
-            outModule = part.FindModuleImplementing<T>();
-            return outModule != null;
         }
 
         public static Color MakeColorTransparent(this Color color, float transparency)
@@ -68,15 +71,10 @@ namespace CIT_Util
             }
         }
 
-        public static double GetMassOfPartAndChildren(this Part part)
+        public static bool TryGetModule<T>(this Part part, out T outModule) where T : PartModule
         {
-            if (part == null)
-            {
-                return 0d;
-            }
-            double sum = part.mass;
-            sum += part.children.Sum(pc => pc.GetMassOfPartAndChildren());
-            return sum;
+            outModule = part.FindModuleImplementing<T>();
+            return outModule != null;
         }
     }
 }

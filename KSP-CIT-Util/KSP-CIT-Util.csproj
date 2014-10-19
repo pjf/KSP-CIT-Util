@@ -46,6 +46,11 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Converter\AvailableResourceInfo.cs" />
+    <Compile Include="Converter\ConverterResource.cs" />
+    <Compile Include="Converter\ConvUtil.cs" />
+    <Compile Include="Converter\ModuleCITUniversalConverter.cs" />
+    <Compile Include="Converter\PerformanceCurve.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="GlobalConst.cs" />
     <Compile Include="OSD.cs" />
