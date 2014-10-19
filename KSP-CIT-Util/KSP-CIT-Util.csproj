@@ -49,6 +49,7 @@
     <Compile Include="Converter\AvailableResourceInfo.cs" />
     <Compile Include="Converter\ConverterResource.cs" />
     <Compile Include="Converter\ConvUtil.cs" />
+    <Compile Include="Converter\Extensions.cs" />
     <Compile Include="Converter\ModuleCITUniversalConverter.cs" />
     <Compile Include="Converter\PerformanceCurve.cs" />
     <Compile Include="Extensions.cs" />

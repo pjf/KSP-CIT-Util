@@ -23,15 +23,22 @@ namespace CIT_Util.Converter
 
         internal bool CanTakeDemand(double demand)
         {
+            //Debug.Log("[UC] resid=" + ResourceId + " amount=" + AvailableAmount + " space=" + AvailableSpace + " demand=" + demand);
+            double diff;
             if (this.OutputResource)
             {
                 if (this.AllowOverflow)
                 {
                     return true;
                 }
-                return Math.Abs(this.AvailableSpace - demand) > ConvUtil.Epsilon;
+                diff = this.AvailableSpace - demand;
+                //return Math.Abs(this.AvailableSpace - demand) > ConvUtil.Epsilon;
             }
-            return Math.Abs(this.AvailableAmount - demand) > ConvUtil.Epsilon;
+            else
+            {
+                diff = this.AvailableAmount - demand;
+            }
+            return diff > 0 && diff > ConvUtil.Epsilon;
         }
 
         internal int TimesCanTakeDemand(double demand)

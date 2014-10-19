@@ -60,12 +60,13 @@ namespace CIT_Util.Converter
         internal double OutputMin;
         internal int Priority;
 
-        internal PerformanceCurvePoint(double inRatio, double outRatio, double inmin, double outmin)
+        internal PerformanceCurvePoint(int priority, double inRatio, double outRatio, double inmin, double outmin)
         {
             this.InputRatio = inRatio;
             this.OutputRatio = outRatio;
             this.InputMin = inmin;
             this.OutputMin = outmin;
+            this.Priority = priority;
         }
     }
 }

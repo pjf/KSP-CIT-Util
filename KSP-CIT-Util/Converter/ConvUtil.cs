@@ -4,8 +4,12 @@ namespace CIT_Util.Converter
 {
     internal static class ConvUtil
     {
-        internal const double Epsilon = 0.0000000001d;
+        internal const double Epsilon = 0.00000001d;
         internal const string NaString = "n.a.";
+        internal const string ElectricCharge = "ElectricCharge";
+        internal const double ElectricChargeMaxDelta = 1d;
+        internal const double MaxDelta = 60*60*6;
+        internal const double RetryDeltaThreshold = 60d;
 
         private static void Log(string msg, bool warning, bool error)
         {
