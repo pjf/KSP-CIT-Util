@@ -60,7 +60,6 @@ namespace CIT_Util.Converter
                 this.LastUpdate = Planetarium.GetUniversalTime();
                 return;
             }
-
             var now = Planetarium.GetUniversalTime();
             var delta = now - this.LastUpdate;
             delta = Math.Min(delta, this.MaxDelta);
@@ -71,8 +70,12 @@ namespace CIT_Util.Converter
                 this._trySmallerDelta = false;
                 triedSmallerDelta = true;
             }
-            //Debug.Log("[UC] delta=" + delta + " trysmaller=" + triedSmallerDelta + " convrate=" + this._conversionRate);
             this.LastUpdate += delta;
+            if (RequiresOxygenAtmo && !vessel.mainBody.atmosphereContainsOxygen)
+            {
+                this._setStatus(ConvStates.LacksOxygen);
+                return;
+            }
             var ratio = delta*this._conversionRate;
             var inResSearchRes = this._findAvailableResources(this._inputResources);
             var outResSearchRes = this._findAvailableResources(this._outputResources);
@@ -128,7 +131,7 @@ namespace CIT_Util.Converter
         public override void OnLoad(ConfigNode node)
         {
             //base.OnLoad(node);
-            Debug.Log(node);
+            //Debug.Log(node);
             var inDefs = node.GetNodes("INPUT_DEF");
             var outDefs = node.GetNodes("OUTPUT_DEF");
             var curve = node.GetNode("CURVE_DEF");
@@ -511,8 +514,63 @@ namespace CIT_Util.Converter
             {
                 return null;
             }
-            //TODO
-            return null;
+            var rules = curveDef.GetValues("Rule");
+            var dataPoints = rules.Select(rule => rule.Split(new[] {","}, StringSplitOptions.RemoveEmptyEntries)).ToList();
+            var points = new List<PerformanceCurvePoint>(rules.Length);
+            foreach (var dataPoint in dataPoints)
+            {
+                var parseError = dataPoint.Length != 5;
+                if (!parseError)
+                {
+                    int priority;
+                    if (int.TryParse(dataPoint[0], out priority))
+                    {
+                        double minIn;
+                        if (double.TryParse(dataPoint[1], out minIn))
+                        {
+                            double maxOut;
+                            if (double.TryParse(dataPoint[2], out maxOut))
+                            {
+                                double inFact;
+                                if (double.TryParse(dataPoint[3], out inFact))
+                                {
+                                    double outFact;
+                                    if (double.TryParse(dataPoint[4], out outFact))
+                                    {
+                                        var pcp = new PerformanceCurvePoint(priority, inFact, outFact, minIn, maxOut);
+                                        points.Add(pcp);
+                                    }
+                                    else
+                                    {
+                                        parseError = true;
+                                    }
+                                }
+                                else
+                                {
+                                    parseError = true;
+                                }
+                            }
+                            else
+                            {
+                                parseError = true;
+                            }
+                        }
+                        else
+                        {
+                            parseError = true;
+                        }
+                    }
+                    else
+                    {
+                        parseError = true;
+                    }
+                }
+                if (parseError)
+                {
+                    ConvUtil.LogWarning("unable to parse performance curve rule - ignoring rule");
+                }
+            }
+            return new PerformanceCurve(points);
         }
 
         private static List<ConverterResource> _processResourceDefinitions(IEnumerable<ConfigNode> defNodes, bool output)
@@ -620,6 +678,11 @@ namespace CIT_Util.Converter
                     text = "Malfunction";
                 }
                     break;
+                case ConvStates.LacksOxygen:
+                {
+                    text = "No oxygen in atmo.";
+                }
+                    break;
             }
             this.Status = text;
         }
@@ -714,7 +777,8 @@ namespace CIT_Util.Converter
             Inactive,
             InputDepleted,
             OutputFull,
-            Malfunction
+            Malfunction,
+            LacksOxygen
         }
     }
 }

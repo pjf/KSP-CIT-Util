@@ -17,7 +17,7 @@ namespace CIT_Util.Converter
             this.OutputResource = outres;
             this.AvailableAmount = available;
             this.AvailableSpace = availSpace;
-            this.PercentageFilled = this.AvailableAmount/this.AvailableSpace;
+            this.PercentageFilled = Math.Min(this.AvailableAmount/this.AvailableSpace, 1d);
             this.AllowOverflow = allowOverflow;
         }
 

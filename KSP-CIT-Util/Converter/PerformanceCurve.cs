@@ -24,21 +24,21 @@ namespace CIT_Util.Converter
                     return performanceCurvePoint;
                 }
             }
-            foreach (var performanceCurvePoint in this._points.Values)
-            {
-                if (performanceCurvePoint.OutputMin >= minOutputReserve)
-                {
-                    return performanceCurvePoint;
-                }
-            }
-            foreach (var performanceCurvePoint in this._points.Values)
-            {
-                if (performanceCurvePoint.InputMin <= minInputReserve)
-                {
-                    return performanceCurvePoint;
-                }
-            }
-            ConvUtil.LogWarning("unable to find matching perf. curve rule, using default 100% ratios.");
+            //foreach (var performanceCurvePoint in this._points.Values)
+            //{
+            //    if (performanceCurvePoint.OutputMin >= minOutputReserve)
+            //    {
+            //        return performanceCurvePoint;
+            //    }
+            //}
+            //foreach (var performanceCurvePoint in this._points.Values)
+            //{
+            //    if (performanceCurvePoint.InputMin <= minInputReserve)
+            //    {
+            //        return performanceCurvePoint;
+            //    }
+            //}
+            //ConvUtil.LogWarning("unable to find matching perf. curve rule, using default 100% ratios.");
             return PerformanceAdjustmentRatios.Default;
         }
     }
