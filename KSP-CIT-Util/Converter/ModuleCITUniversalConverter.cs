@@ -11,17 +11,24 @@ namespace CIT_Util.Converter
     {
         private const byte RemTimeUpdateInterval = 5;
         private const byte RemTimeUpdateIntervalEditor = 30;
+        [KSPField(isPersistant = false)] public bool AlwaysActive = false;
         [KSPField] public string ConversionRate = "1.0";
         [KSPField(isPersistant = true)] public bool ConverterActive;
-        [KSPField] public string ConverterName = ConvUtil.NaString;
+        [KSPField(isPersistant = false)] public string ConverterName = ConvUtil.NaString;
         [KSPField(isPersistant = false)] public string CurveString;
+        [KSPField(isPersistant = false)] public bool ExternalControl = false;
+        [KSPField(isPersistant = false)] public bool IgnorePutTakeMore = true;
         [KSPField(isPersistant = false)] public string InputDefsString;
         [KSPField(isPersistant = true)] public double LastUpdate;
-        [KSPField] public double MaxDelta = ConvUtil.MaxDelta;
-        [KSPField] public double MaxEcDelta = ConvUtil.ElectricChargeMaxDelta;
+        [KSPField(isPersistant = false)] public bool LockWhilePacked = false;
+        [KSPField(isPersistant = false)] public double MaxDelta = ConvUtil.MaxDelta;
+        [KSPField(isPersistant = false)] public double MaxEcDelta = ConvUtil.ElectricChargeMaxDelta;
         [KSPField(isPersistant = false)] public string OutputDefsString;
         [KSPField(guiActive = true, guiActiveEditor = true)] public string RemTime = ConvUtil.NaString;
+        [KSPField(isPersistant = false)] public bool RequiresOxygenAtmo = false;
         [KSPField(guiActive = true, guiActiveEditor = true)] public string Status = ConvUtil.NaString;
+        [KSPField(isPersistant = false)] public bool UseManualTransfer = true;
+        [KSPField(isPersistant = false)] public bool UseRollbacks = true;
         private PerformanceAdjustmentRatios _adjustmentRatios = PerformanceAdjustmentRatios.Default;
         private Tuple<List<AvailableResourceInfo>, List<AvailableResourceInfo>> _availResForRemTime;
         private double _conversionRate;
@@ -29,6 +36,7 @@ namespace CIT_Util.Converter
         private bool _initialized;
         private List<ConverterResource> _inputResources;
         private List<ConverterResource> _outputResources;
+        private Dictionary<int, List<PartResource>>[] _partResourcesForManualTransfer;
         private PerformanceCurve _performanceCurve;
         private byte _remTimeUpdateCounter = RemTimeUpdateInterval;
         private bool _trySmallerDelta;
@@ -41,9 +49,7 @@ namespace CIT_Util.Converter
                 || !HighLogic.LoadedSceneHasPlanetarium
                 || Time.timeSinceLevelLoad < 1.0f
                 || !FlightGlobals.ready
-                || (this.vessel != null
-                    && (!this.vessel.loaded
-                        || this.vessel.packed)))
+                || this._checkLockWhilePacked())
             {
                 this._setStatus(ConvStates.Inactive);
                 this._trySmallerDelta = false;
@@ -68,8 +74,11 @@ namespace CIT_Util.Converter
             //Debug.Log("[UC] delta=" + delta + " trysmaller=" + triedSmallerDelta + " convrate=" + this._conversionRate);
             this.LastUpdate += delta;
             var ratio = delta*this._conversionRate;
-            var availableInRes = this._findAvailableResources(this._inputResources);
-            var availableOutRes = this._findAvailableResources(this._outputResources);
+            var inResSearchRes = this._findAvailableResources(this._inputResources);
+            var outResSearchRes = this._findAvailableResources(this._outputResources);
+            var availableInRes = inResSearchRes.Item1;
+            var availableOutRes = outResSearchRes.Item1;
+            this._partResourcesForManualTransfer = new[] {inResSearchRes.Item2, outResSearchRes.Item2};
             this._availResForRemTime = new Tuple<List<AvailableResourceInfo>, List<AvailableResourceInfo>>(availableInRes, availableOutRes);
             //Debug.Log("[UC] availableresIn = " + availableInRes.Count + " availableoutres = " + availableOutRes.Count);
             this._setupAdjustmentRatios(_findSmallestAmount(availableInRes), _findSmallestAmount(availableOutRes));
@@ -171,6 +180,10 @@ namespace CIT_Util.Converter
             {
                 this._electricChargeId = -1;
             }
+            if (this.AlwaysActive)
+            {
+                this.ConverterActive = true;
+            }
             //TODO
         }
 
@@ -198,7 +211,15 @@ namespace CIT_Util.Converter
                 }
                 if (!this.ConverterActive)
                 {
-                    this._availResForRemTime = new Tuple<List<AvailableResourceInfo>, List<AvailableResourceInfo>>(this._findAvailableResources(this._inputResources), this._findAvailableResources(this._outputResources));
+                    this._availResForRemTime = new Tuple<List<AvailableResourceInfo>, List<AvailableResourceInfo>>(this._findAvailableResources(this._inputResources, true).Item1,
+                                                                                                                   this._findAvailableResources(this._outputResources, true).Item1);
+                }
+                else
+                {
+                    if (this._availResForRemTime == null)
+                    {
+                        return;
+                    }
                 }
             }
             else if (HighLogic.LoadedSceneIsEditor)
@@ -210,11 +231,11 @@ namespace CIT_Util.Converter
                 this._availResForRemTime = new Tuple<List<AvailableResourceInfo>, List<AvailableResourceInfo>>(this._findAvailableResourcesInEditor(this._inputResources), this._findAvailableResourcesInEditor(this._outputResources));
                 //Debug.Log("Update in editor");
             }
-            var inConst = this._findEarliestConstraint(this._inputResources, this._availResForRemTime.Item1, int.MaxValue);
+            var inConst = _findEarliestConstraint(this._inputResources, this._availResForRemTime.Item1, int.MaxValue);
             var earliestConstraint = inConst.Item2;
             var lowestTakes = inConst.Item1;
             var lowestPercent = inConst.Item3;
-            var outConst = this._findEarliestConstraint(this._outputResources, this._availResForRemTime.Item2, lowestTakes);
+            var outConst = _findEarliestConstraint(this._outputResources, this._availResForRemTime.Item2, lowestTakes);
             if (outConst.Item1 < lowestTakes)
             {
                 earliestConstraint = outConst.Item2;
@@ -240,6 +261,15 @@ namespace CIT_Util.Converter
                 }
             }
             return !required || availableRes.Count > 0;
+        }
+
+        private bool _checkLockWhilePacked()
+        {
+            if (!this.LockWhilePacked)
+            {
+                return false;
+            }
+            return this.vessel != null && (!this.vessel.loaded || this.vessel.packed);
         }
 
         private static string _convertRemainingToDisplayText(double remainingSeconds, double remainingPercent, ConverterResource earliestConstraint)
@@ -273,7 +303,7 @@ namespace CIT_Util.Converter
                 var finalRatio = cr.RatePerSecond*ratio;
                 if (cr.ResourceName == ConvUtil.ElectricCharge)
                 {
-                    var ecMax = this._conversionRate*cr.RatePerSecond*this.MaxEcDelta;
+                    var ecMax = this._conversionRate*cr.RatePerSecond*Math.Max(this.MaxEcDelta, TimeWarp.fixedDeltaTime);
                     finalRatio = Math.Min(ecMax, finalRatio);
                     //Debug.Log("[UC] ecMax=" + ecMax);
                 }
@@ -310,8 +340,9 @@ namespace CIT_Util.Converter
             return nodes.ToArray();
         }
 
-        private List<AvailableResourceInfo> _findAvailableResources(IList<ConverterResource> resList)
+        private Tuple<List<AvailableResourceInfo>, Dictionary<int, List<PartResource>>> _findAvailableResources(IList<ConverterResource> resList, bool editor = false)
         {
+            var partResDic = new Dictionary<int, List<PartResource>>();
             var resListCount = resList.Count;
             var retList = new List<AvailableResourceInfo>(resListCount);
             for (var i = 0; i < resListCount; i++)
@@ -328,8 +359,12 @@ namespace CIT_Util.Converter
                     spaceAvailable += (pr.maxAmount - pr.amount);
                 }
                 retList.Add(new AvailableResourceInfo(resDef.ResourceId, resDef.OutputResource, amountAvailable, spaceAvailable, resDef.AllowOverflow));
+                if (!editor)
+                {
+                    partResDic.Add(resDef.ResourceId, partRes);
+                }
             }
-            return retList;
+            return new Tuple<List<AvailableResourceInfo>, Dictionary<int, List<PartResource>>>(retList, partResDic);
         }
 
         private List<AvailableResourceInfo> _findAvailableResourcesInEditor(ICollection<ConverterResource> resList)
@@ -381,7 +416,7 @@ namespace CIT_Util.Converter
             return availRes;
         }
 
-        private Tuple<int, ConverterResource, double> _findEarliestConstraint(List<ConverterResource> conres, List<AvailableResourceInfo> availres, int lTakes)
+        private static Tuple<int, ConverterResource, double> _findEarliestConstraint(IList<ConverterResource> conres, List<AvailableResourceInfo> availres, int lTakes)
         {
             ConverterResource earliestConstraint = null;
             var lowestTakes = lTakes;
@@ -431,6 +466,43 @@ namespace CIT_Util.Converter
                 .Select(cr => cr.ResourceName)
                 .FirstOrDefault();
             return resName ?? ConvUtil.NaString;
+        }
+
+        private double _manualResourceTransfer(int resourceId, double demand, bool output, IList<double> availableAmounts)
+        {
+            var partResDic = this._partResourcesForManualTransfer[output ? 1 : 0];
+            if (this._partResourcesForManualTransfer == null || partResDic == null || !partResDic.ContainsKey(resourceId))
+            {
+                return 0d;
+            }
+            var partRes = partResDic[resourceId];
+            if (output)
+            {
+                var remaining = -demand;
+                var percentage = Math.Min(remaining/availableAmounts[1], 1.0);
+                for (var i = 0; i < partRes.Count; i++)
+                {
+                    var pr = partRes[i];
+                    var localSpace = pr.maxAmount - pr.amount;
+                    var transfer = localSpace*percentage;
+                    pr.amount += transfer;
+                    remaining -= transfer;
+                }
+                return demand + remaining;
+            }
+            else
+            {
+                var remaining = demand;
+                var percentage = Math.Min(remaining/availableAmounts[0], 1.0);
+                for (var i = 0; i < partRes.Count; i++)
+                {
+                    var pr = partRes[i];
+                    var transfer = pr.amount*percentage;
+                    pr.amount -= transfer;
+                    remaining -= transfer;
+                }
+                return demand - remaining;
+            }
         }
 
         private PerformanceCurve _parsePerformanceCurveDefinition(ConfigNode curveDef)
@@ -493,14 +565,17 @@ namespace CIT_Util.Converter
                 var output = ari.OutputResource;
                 var rid = ari.ResourceId;
                 var demand = resTab[rid];
-                var transferResult = this._transferResource(rid, demand, output);
+                var transferResult = this._transferResource(rid, demand, output, new[] {ari.AvailableAmount, ari.AvailableSpace});
                 rollbackBuffer.Add(new Tuple<int, double>(transferResult.Item2, transferResult.Item3));
                 if (transferResult.Item1 || (ari.OutputResource && ari.AllowOverflow && ari.AvailableSpace <= ConvUtil.Epsilon))
                 {
                     continue;
                 }
                 this._logTransferError(output ? "production" : "consumption", rid, output, transferResult.Item4);
-                return true;
+                if (this.UseRollbacks)
+                {
+                    return true;
+                }
             }
             return false;
         }
@@ -594,24 +669,38 @@ namespace CIT_Util.Converter
             return sb.ToString();
         }
 
-        private Tuple<bool, int, double, double> _transferResource(int resourceId, double demand, bool output)
+        private Tuple<bool, int, double, double> _transferResource(int resourceId, double demand, bool output, double[] availableAmounts)
         {
             if (output)
             {
                 demand *= -1;
             }
-            var actual = this.part.RequestResource(resourceId, demand);
-            //Debug.Log("[UC] resid=" + resourceId + " demand=" + demand + " actual=" + actual);
+            var actual = this.UseManualTransfer ? this._manualResourceTransfer(resourceId, demand, output, availableAmounts) : this.part.RequestResource(resourceId, demand);
+            //Debug.Log("[UC] resid=" + resourceId + " demand=" + demand + " actual=" + actual+" wouldbeTACok="+(Math.Abs(actual)<(Math.Abs(demand*0.999))));
             var diff = Math.Abs(actual - demand);
             var treshold = resourceId == this._electricChargeId ? 1d : ConvUtil.Epsilon;
-            var success = diff < treshold;
+            bool success;
+            if (this.IgnorePutTakeMore)
+            {
+                success = Math.Abs(actual) < (Math.Abs(demand*0.999));
+                success |= diff < ConvUtil.Epsilon;
+            }
+            else
+            {
+                success = diff < treshold;
+            }
             return new Tuple<bool, int, double, double>(success, resourceId, actual, diff);
         }
 
         private void _updateGui()
         {
             this.Fields["Status"].guiName = this.ConverterName;
-            this.Events["ToggleConverter"].guiName = "Toggle " + this.ConverterName;
+            var toggleEvent = this.Events["ToggleConverter"];
+            toggleEvent.guiName = "Toggle " + this.ConverterName;
+            if (this.AlwaysActive || this.ExternalControl)
+            {
+                toggleEvent.active = toggleEvent.guiActive = toggleEvent.guiActiveEditor = false;
+            }
             this.Fields["RemTime"].guiName = this.ConverterName;
             if (HighLogic.LoadedSceneIsEditor)
             {
