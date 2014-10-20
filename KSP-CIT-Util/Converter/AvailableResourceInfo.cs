@@ -11,6 +11,7 @@ namespace CIT_Util.Converter
         internal double PercentageFilled { get; set; }
         internal double RatePerSecond { get; set; }
         internal int ResourceId { get; set; }
+        internal double TotalSpace { get; set; }
 
         internal AvailableResourceInfo(int id, bool outres, double available, double availSpace, double ratePerSec, bool allowOverflow = false)
         {
@@ -18,14 +19,14 @@ namespace CIT_Util.Converter
             this.OutputResource = outres;
             this.AvailableAmount = available;
             this.AvailableSpace = availSpace;
-            this.PercentageFilled = Math.Min(this.AvailableAmount/this.AvailableSpace, 1d);
+            this.TotalSpace = AvailableAmount + AvailableSpace;
+            this.PercentageFilled = this.AvailableAmount/TotalSpace;
             this.RatePerSecond = ratePerSec;
             this.AllowOverflow = allowOverflow;
         }
 
         internal bool CanTakeDemand(double demand)
         {
-            //Debug.Log("[UC] resid=" + ResourceId + " amount=" + AvailableAmount + " space=" + AvailableSpace + " demand=" + demand);
             double diff;
             if (this.OutputResource)
             {
@@ -34,7 +35,6 @@ namespace CIT_Util.Converter
                     return true;
                 }
                 diff = this.AvailableSpace - demand;
-                //return Math.Abs(this.AvailableSpace - demand) > ConvUtil.Epsilon;
             }
             else
             {

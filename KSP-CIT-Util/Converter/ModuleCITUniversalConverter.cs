@@ -173,7 +173,7 @@ namespace CIT_Util.Converter
                 this._conversionRate = 1d;
                 ConvUtil.LogWarning("unable to parse conversion rate, defaulting to 1.0");
             }
-            this.Fields["Status"].guiName = this.ConverterName;
+            this.Fields["Status"].guiName = this.ConverterName + " rem.";
             this.Events["ToggleConverter"].guiName = "Toggle " + this.ConverterName;
             this._initialized = true;
         }
@@ -431,7 +431,7 @@ namespace CIT_Util.Converter
                         break;
                     case ResourceFlowMode.STACK_PRIORITY_SEARCH:
                     {
-                        parts = this.part.FindPartsInSameResStack(EditorLogic.fetch.ship.Parts, new HashSet<Part>(), converterResource.OutputResource);
+                        parts = this.part.FindPartsInSameResStack(EditorLogic.fetch.ship.Parts, new HashSet<Part>(), converterResource.OutputResource, true);
                     }
                         break;
                     default:
@@ -449,8 +449,12 @@ namespace CIT_Util.Converter
                     availAmount += pr.amount;
                     availSpace += (pr.maxAmount - pr.amount);
                 }
-                var ar = new AvailableResourceInfo(cresource.ResourceId, cresource.OutputResource, availAmount, availSpace, cresource.RatePerSecond, cresource.AllowOverflow);
-                availRes.Add(ar);
+                if (parts.Count > 0)
+                {
+                    var ar = new AvailableResourceInfo(cresource.ResourceId, cresource.OutputResource, availAmount, availSpace, cresource.RatePerSecond, cresource.AllowOverflow);
+                    availRes.Add(ar);
+                }
+                Debug.Log("[UC] found " + availRes.Count + " availres in editor in " + parts.Count + " parts");
             }
             return availRes;
         }
