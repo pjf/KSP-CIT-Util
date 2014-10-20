@@ -26,6 +26,7 @@ namespace CIT_Util.Converter
         [KSPField(isPersistant = false)] public string OutputDefsString;
         [KSPField(guiActive = true, guiActiveEditor = true)] public string RemTime = ConvUtil.NaString;
         [KSPField(isPersistant = false)] public bool RequiresOxygenAtmo = false;
+        [KSPField(isPersistant = false)] public bool ShowRemaining = true;
         [KSPField(guiActive = true, guiActiveEditor = true)] public string Status = ConvUtil.NaString;
         [KSPField(isPersistant = false)] public bool UseManualTransfer = true;
         [KSPField(isPersistant = false)] public bool UseRollbacks = true;
@@ -39,6 +40,7 @@ namespace CIT_Util.Converter
         private Dictionary<int, List<PartResource>>[] _partResourcesForManualTransfer;
         private PerformanceCurve _performanceCurve;
         private byte _remTimeUpdateCounter = RemTimeUpdateInterval;
+        private HashSet<ResourceConstraintInfo> _resourceConstraints;
         private bool _trySmallerDelta;
 
         public void FixedUpdate()
@@ -51,7 +53,10 @@ namespace CIT_Util.Converter
                 || !FlightGlobals.ready
                 || this._checkLockWhilePacked())
             {
-                this._setStatus(ConvStates.Inactive);
+                if (!HighLogic.LoadedSceneIsEditor)
+                {
+                    this._setStatus(ConvStates.Inactive);
+                }
                 this._trySmallerDelta = false;
                 return;
             }
@@ -71,7 +76,7 @@ namespace CIT_Util.Converter
                 triedSmallerDelta = true;
             }
             this.LastUpdate += delta;
-            if (RequiresOxygenAtmo && !vessel.mainBody.atmosphereContainsOxygen)
+            if (this.RequiresOxygenAtmo && !this.vessel.mainBody.atmosphereContainsOxygen)
             {
                 this._setStatus(ConvStates.LacksOxygen);
                 return;
@@ -81,6 +86,7 @@ namespace CIT_Util.Converter
             var outResSearchRes = this._findAvailableResources(this._outputResources);
             var availableInRes = inResSearchRes.Item1;
             var availableOutRes = outResSearchRes.Item1;
+            // _calculateResourceConstraints(availableInRes, availableOutRes);
             this._partResourcesForManualTransfer = new[] {inResSearchRes.Item2, outResSearchRes.Item2};
             this._availResForRemTime = new Tuple<List<AvailableResourceInfo>, List<AvailableResourceInfo>>(availableInRes, availableOutRes);
             //Debug.Log("[UC] availableresIn = " + availableInRes.Count + " availableoutres = " + availableOutRes.Count);
@@ -206,6 +212,10 @@ namespace CIT_Util.Converter
             }
             this._remTimeUpdateCounter = HighLogic.LoadedSceneIsEditor ? RemTimeUpdateIntervalEditor : RemTimeUpdateInterval;
             this._updateGui();
+            if (!this.ShowRemaining)
+            {
+                return;
+            }
             if (HighLogic.LoadedSceneIsFlight)
             {
                 if (!this._initialized)
@@ -232,25 +242,53 @@ namespace CIT_Util.Converter
                     this.OnLoad(new ConfigNode());
                 }
                 this._availResForRemTime = new Tuple<List<AvailableResourceInfo>, List<AvailableResourceInfo>>(this._findAvailableResourcesInEditor(this._inputResources), this._findAvailableResourcesInEditor(this._outputResources));
-                //Debug.Log("Update in editor");
             }
-            var inConst = _findEarliestConstraint(this._inputResources, this._availResForRemTime.Item1, int.MaxValue);
-            var earliestConstraint = inConst.Item2;
-            var lowestTakes = inConst.Item1;
-            var lowestPercent = inConst.Item3;
-            var outConst = _findEarliestConstraint(this._outputResources, this._availResForRemTime.Item2, lowestTakes);
-            if (outConst.Item1 < lowestTakes)
+            this._calculateResourceConstraints(this._availResForRemTime.Item1, this._availResForRemTime.Item2);
+            if (this._resourceConstraints.Count > 0)
             {
-                earliestConstraint = outConst.Item2;
-                lowestTakes = outConst.Item1;
-                lowestPercent = outConst.Item3;
+                var earliestConstraint = _findEarliestConstraint(this._resourceConstraints.ToArray());
+                this.RemTime = _convertRemainingToDisplayText(earliestConstraint.RemainingSeconds, earliestConstraint.RemainingPercentage, true);
             }
-            this.RemTime = _convertRemainingToDisplayText(lowestTakes, lowestPercent, earliestConstraint);
+            else
+            {
+                this.RemTime = _convertRemainingToDisplayText(0d, 0d, false);
+            }
         }
 
         private double _adjustRatio(double ratio, bool outres)
         {
             return ratio*(outres ? this._adjustmentRatios.OutputRatio : this._adjustmentRatios.InputRatio);
+        }
+
+        private IEnumerable<ResourceConstraintInfo> _calculateResourceConstraint(IList<AvailableResourceInfo> availableRes, bool output)
+        {
+            var resConsts = new HashSet<ResourceConstraintInfo>();
+            for (var i = 0; i < availableRes.Count; i++)
+            {
+                var ari = availableRes[i];
+                var rci = new ResourceConstraintInfo
+                          {
+                              ResourceId = ari.ResourceId,
+                              OutputResource = ari.OutputResource,
+                              RemainingSeconds = ari.TimesCanTakeDemand(this._adjustRatio(ari.RatePerSecond, output)),
+                              RemainingPercentage = output ? 1d - ari.PercentageFilled : ari.PercentageFilled
+                          };
+                resConsts.Add(rci);
+            }
+            return resConsts;
+        }
+
+        private void _calculateResourceConstraints(IList<AvailableResourceInfo> availableInRes, IList<AvailableResourceInfo> availableOutRes)
+        {
+            var resConst = new List<ResourceConstraintInfo>();
+            resConst.AddRange(this._calculateResourceConstraint(availableInRes, false));
+            resConst.AddRange(this._calculateResourceConstraint(availableOutRes, true));
+            this._resourceConstraints = new HashSet<ResourceConstraintInfo>();
+            for (var i = 0; i < resConst.Count; i++)
+            {
+                var rc = resConst[i];
+                this._resourceConstraints.Add(rc);
+            }
         }
 
         private static bool _canAllTakeDemand(IList<AvailableResourceInfo> availableRes, IDictionary<int, double> resTab, bool required)
@@ -275,10 +313,10 @@ namespace CIT_Util.Converter
             return this.vessel != null && (!this.vessel.loaded || this.vessel.packed);
         }
 
-        private static string _convertRemainingToDisplayText(double remainingSeconds, double remainingPercent, ConverterResource earliestConstraint)
+        private static string _convertRemainingToDisplayText(double remainingSeconds, double remainingPercent, bool foundConstraint)
         {
             string displayText;
-            if (earliestConstraint == null)
+            if (!foundConstraint)
             {
                 displayText = "no limit";
                 return displayText;
@@ -304,14 +342,12 @@ namespace CIT_Util.Converter
             {
                 var cr = convRes[i];
                 var finalRatio = cr.RatePerSecond*ratio;
-                if (cr.ResourceName == ConvUtil.ElectricCharge)
+                if (cr.ResourceId == this._electricChargeId)
                 {
                     var ecMax = this._conversionRate*cr.RatePerSecond*Math.Max(this.MaxEcDelta, TimeWarp.fixedDeltaTime);
                     finalRatio = Math.Min(ecMax, finalRatio);
-                    //Debug.Log("[UC] ecMax=" + ecMax);
                 }
                 lt.Add(cr.ResourceId, finalRatio);
-                //Debug.Log("[UC] " + cr.ResourceName + " ratio=" + finalRatio + " which is per second=" + finalRatio/ratio);
             }
             return lt;
         }
@@ -361,7 +397,7 @@ namespace CIT_Util.Converter
                     amountAvailable += pr.amount;
                     spaceAvailable += (pr.maxAmount - pr.amount);
                 }
-                retList.Add(new AvailableResourceInfo(resDef.ResourceId, resDef.OutputResource, amountAvailable, spaceAvailable, resDef.AllowOverflow));
+                retList.Add(new AvailableResourceInfo(resDef.ResourceId, resDef.OutputResource, amountAvailable, spaceAvailable, resDef.RatePerSecond, resDef.AllowOverflow));
                 if (!editor)
                 {
                     partResDic.Add(resDef.ResourceId, partRes);
@@ -413,34 +449,28 @@ namespace CIT_Util.Converter
                     availAmount += pr.amount;
                     availSpace += (pr.maxAmount - pr.amount);
                 }
-                var ar = new AvailableResourceInfo(cresource.ResourceId, cresource.OutputResource, availAmount, availSpace, cresource.AllowOverflow);
+                var ar = new AvailableResourceInfo(cresource.ResourceId, cresource.OutputResource, availAmount, availSpace, cresource.RatePerSecond, cresource.AllowOverflow);
                 availRes.Add(ar);
             }
             return availRes;
         }
 
-        private static Tuple<int, ConverterResource, double> _findEarliestConstraint(IList<ConverterResource> conres, List<AvailableResourceInfo> availres, int lTakes)
+        private static ResourceConstraintInfo _findEarliestConstraint(IList<ResourceConstraintInfo> constraints)
         {
-            ConverterResource earliestConstraint = null;
-            var lowestTakes = lTakes;
-            AvailableResourceInfo earliestConstraintInfo = null;
-            for (var i = 0; i < conres.Count; i++)
+            if (constraints.Count == 0)
             {
-                var cr = conres[i];
-                var ar = availres.Where(avr => avr.ResourceId == cr.ResourceId).Select(avr => avr).FirstOrDefault();
-                if (ar != null)
+                throw new ArgumentException("constraint list empty");
+            }
+            var earliest = constraints[0];
+            for (var i = 1; i < constraints.Count; i++)
+            {
+                var c = constraints[i];
+                if (c.RemainingSeconds < earliest.RemainingSeconds)
                 {
-                    var takes = ar.TimesCanTakeDemand(cr.RatePerSecond);
-                    if (takes < lowestTakes)
-                    {
-                        lowestTakes = takes;
-                        earliestConstraint = cr;
-                        earliestConstraintInfo = ar;
-                    }
+                    earliest = c;
                 }
             }
-            var remPercent = earliestConstraintInfo != null ? (earliestConstraintInfo.OutputResource ? 1d - earliestConstraintInfo.PercentageFilled : earliestConstraintInfo.PercentageFilled) : 0d;
-            return new Tuple<int, ConverterResource, double>(lowestTakes, earliestConstraint, remPercent);
+            return earliest;
         }
 
         private static double _findSmallestAmount(IList<AvailableResourceInfo> resList)
@@ -767,6 +797,7 @@ namespace CIT_Util.Converter
             this.Fields["RemTime"].guiName = this.ConverterName;
             if (HighLogic.LoadedSceneIsEditor)
             {
+                Debug.Log("[UC] updating GUI in editor");
                 this._setStatus(this.ConverterActive ? ConvStates.Active : ConvStates.Inactive);
             }
         }
@@ -779,6 +810,14 @@ namespace CIT_Util.Converter
             OutputFull,
             Malfunction,
             LacksOxygen
+        }
+
+        private struct ResourceConstraintInfo
+        {
+            internal bool OutputResource;
+            internal double RemainingPercentage;
+            internal int RemainingSeconds;
+            internal int ResourceId;
         }
     }
 }

@@ -9,15 +9,17 @@ namespace CIT_Util.Converter
         internal double AvailableSpace { get; set; }
         internal bool OutputResource { get; set; }
         internal double PercentageFilled { get; set; }
+        internal double RatePerSecond { get; set; }
         internal int ResourceId { get; set; }
 
-        internal AvailableResourceInfo(int id, bool outres, double available, double availSpace, bool allowOverflow = false)
+        internal AvailableResourceInfo(int id, bool outres, double available, double availSpace, double ratePerSec, bool allowOverflow = false)
         {
             this.ResourceId = id;
             this.OutputResource = outres;
             this.AvailableAmount = available;
             this.AvailableSpace = availSpace;
             this.PercentageFilled = Math.Min(this.AvailableAmount/this.AvailableSpace, 1d);
+            this.RatePerSecond = ratePerSec;
             this.AllowOverflow = allowOverflow;
         }
 
